@@ -250,8 +250,8 @@ def main():
     frame_duration = 100  # 100ms
     ice_area_height_rate = 0.80  # ice_area_height / image_height
     ice_area_bottom_width = 20.0  # 20m
-    ice_area_top_width = 50.0  # 50.0m
-    river_width = 35.0  # 35.0m
+    ice_area_top_width = 45.5  # 45.5m
+    river_width = 150.0  # 150.0m
     show_point_box = True
     cmap = 'spring'
     maxdist = 200
@@ -264,160 +264,163 @@ def main():
     model = PipsPointTracker(checkpoint_path=model_path, stride=8, s=8)
     model.eval()
 
-    stage = 3
-    video_index = 4
-    # prepare data
-    image_path = f'./dataset/RiverIceFixedCamera/{stage}/{video_index}/'
-    seg_motion_path = f'./dataset/RiverIceFixedCameraSegMotion/{stage}/{video_index}/'
-    segmentation_path = f'./dataset/RiverIceFixedCameraSegmentation/{stage}/{video_index}/pseudo_color_prediction'
-    point_track_path = Path(f'./dataset/RiverIceFixedCameraPointTrack/{stage}/{video_index}')
-    point_track_path_video = Path(f'./dataset/RiverIceFixedCameraPointTrackVideo/{stage}/{video_index}')
-    point_track_path_velocity = Path(f'./dataset/RiverIceFixedCameraPointTrackVelocity/{stage}/{video_index}')
-    point_track_path.mkdir(exist_ok=True, parents=True)
-    point_track_path_video.mkdir(exist_ok=True, parents=True)
-    point_track_path_velocity.mkdir(exist_ok=True, parents=True)
+    ids = [1, 6, 10, 6, 3]
+    for idx_stage, idx_video in enumerate(ids):
+        for idx_v in range(idx_video):
+            stage = idx_stage+1
+            video_index = idx_v+1
+            # prepare data
+            image_path = f'./dataset/RiverIceFixedCamera/{stage}/{video_index}/'
+            seg_motion_path = f'./dataset/RiverIceFixedCameraSegMotion/{stage}/{video_index}/'
+            segmentation_path = f'./dataset/RiverIceFixedCameraSegmentation/{stage}/{video_index}/pseudo_color_prediction'
+            point_track_path = Path(f'./dataset/RiverIceFixedCameraPointTrack/{stage}/{video_index}')
+            point_track_path_video = Path(f'./dataset/RiverIceFixedCameraPointTrackVideo/{stage}/{video_index}')
+            point_track_path_velocity = Path(f'./dataset/RiverIceFixedCameraPointTrackVelocity/{stage}/{video_index}')
+            point_track_path.mkdir(exist_ok=True, parents=True)
+            point_track_path_video.mkdir(exist_ok=True, parents=True)
+            point_track_path_velocity.mkdir(exist_ok=True, parents=True)
 
-    file_list = os.listdir(image_path)
-    file_list = sorted(file_list, key=lambda c: ms_get_int(c))
-    file_list = file_list[::frame_stride]
+            file_list = os.listdir(image_path)
+            file_list = sorted(file_list, key=lambda c: ms_get_int(c))
+            file_list = file_list[::frame_stride]
 
-    image_names_8 = []
-    image_frames_8 = []
-    image_frames_torch_8 = []
-    seg_motion_frames_8 = []
-    segmentation_frames_8 = []
+            image_names_8 = []
+            image_frames_8 = []
+            image_frames_torch_8 = []
+            seg_motion_frames_8 = []
+            segmentation_frames_8 = []
 
-    image_width = 0
-    image_height = 0
-    grid_width = 0
-    grid_height = 0
-    pixel_width_a = 0.0
-    pixel_width_w = 0.0
-    pixel_height = 0.0
-    roi_list = []
-    point_dict_list = []
+            image_width = 0
+            image_height = 0
+            grid_width = 0
+            grid_height = 0
+            pixel_width_a = 0.0
+            pixel_width_w = 0.0
+            pixel_height = 0.0
+            roi_list = []
+            point_dict_list = []
 
-    point_track_video = None
-    for idx, frame in enumerate(file_list):
-        frame_filename = os.path.join(image_path, frame)
-        seg_motion_filename = os.path.join(seg_motion_path, frame.split('.')[0] + '.png')
-        segmentation_filename = os.path.join(segmentation_path, frame.split('.')[0] + '.png')
+            point_track_video = None
+            for idx, frame in enumerate(file_list):
+                frame_filename = os.path.join(image_path, frame)
+                seg_motion_filename = os.path.join(seg_motion_path, frame.split('.')[0] + '.png')
+                segmentation_filename = os.path.join(segmentation_path, frame.split('.')[0] + '.png')
 
-        image_names_8 += [frame]
+                image_names_8 += [frame]
 
-        img = cv2.imread(frame_filename)
-        image_frames_8 += [img]
+                img = cv2.imread(frame_filename)
+                image_frames_8 += [img]
 
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = torch.from_numpy(img).permute(2, 0, 1)
-        image_frames_torch_8 += [img]
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                img = torch.from_numpy(img).permute(2, 0, 1)
+                image_frames_torch_8 += [img]
 
-        segmentation = cv2.imread(segmentation_filename, 0)
-        segmentation_frames_8 += [segmentation]
+                segmentation = cv2.imread(segmentation_filename, 0)
+                segmentation_frames_8 += [segmentation]
 
-        seg_motion = cv2.imread(seg_motion_filename, 0)
-        # modify seg_motion based on segmentation
-        seg_motion_new = np.where((segmentation == 75) & (seg_motion == 255), seg_motion, 0)  # 75 for ice
-        seg_motion_frames_8 += [seg_motion_new]
+                seg_motion = cv2.imread(seg_motion_filename, 0)
+                # modify seg_motion based on segmentation
+                seg_motion_new = np.where((segmentation == 75) & (seg_motion == 255), seg_motion, 0)  # 75 for ice
+                seg_motion_frames_8 += [seg_motion_new]
 
-        # init roi_list # 16 * 16 grid
-        if len(image_frames_8) == 1:
-            image_width, image_height, grid_width, grid_height, roi_list = generate_grid(image_frames_8[0], grid_factor)
-            x_a = (ice_area_top_width - ice_area_bottom_width)/(float(image_height)*ice_area_height_rate)
-            pixel_width_a = float(image_height)*x_a/float(image_width) + ice_area_bottom_width/float(image_width)
-            pixel_width_w = -(x_a/float(image_width))
-            pixel_height = river_width/(float(image_height)*ice_area_height_rate)
-            fourcc = cv2.VideoWriter_fourcc(*'XVID')
-            point_track_video = cv2.VideoWriter(os.path.join(point_track_path_video, f'{stage}_{video_index}.avi'),
-                                                fourcc, 24.0, (image_width, image_height))
+                # init roi_list # 16 * 16 grid
+                if len(image_frames_8) == 1:
+                    image_width, image_height, grid_width, grid_height, roi_list = generate_grid(image_frames_8[0], grid_factor)
+                    x_a = (ice_area_top_width - ice_area_bottom_width)/(float(image_height)*ice_area_height_rate)
+                    pixel_width_a = float(image_height)*x_a/float(image_width) + ice_area_bottom_width/float(image_width)
+                    pixel_width_w = -(x_a/float(image_width))
+                    pixel_height = river_width/(float(image_height)*ice_area_height_rate)
+                    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+                    point_track_video = cv2.VideoWriter(os.path.join(point_track_path_video, f'{stage}_{video_index}.avi'),
+                                                        fourcc, 24.0, (image_width, image_height))
 
-        if len(image_frames_8) < 8:
-            continue
-
-        # has 8 frame in buffer
-        # prepare query points
-        # find moving point each grid if this grid has no point
-        new_point_list = find_new_point(seg_motion_frames_8[0], roi_list, point_dict_list, grid_factor, area_threshold)
-        # add new point into point_dict_list
-        for point in new_point_list:
-            pid = generate_point_id(point_dict_list)
-            point_dict = {'id': pid, 'points': [point], 'visibility': 1.0}
-            point_dict_list.append(point_dict)
-
-        xy = []
-        for pd in point_dict_list:
-            point = pd['points'][-1]
-            point = torch.from_numpy(np.array(point))
-            xy += [point]
-
-        if idx == 7:  # output first image
-            draw_output(point_dict_list, cmap, maxdist, image_frames_8[0], image_names_8[0], point_track_video,
-                        show_point_box, point_box_h, point_track_path)
-            # clac velocity
-            clac_velocity(point_dict_list, os.path.join(point_track_path_velocity,
-                                                        image_names_8[0].split('.')[0] + '.txt'),
-                          pixel_width_a, pixel_width_w, pixel_height, frame_stride, frame_duration)
-
-        if idx == len(file_list) - 1:  # last images
-            if len(xy) > 0:
-                # prepare rgbs
-                input_images = torch.stack(image_frames_torch_8).unsqueeze(0)
-                # prepare query points
-                query_points = torch.stack(xy).unsqueeze(0)
-                # tracking next 7 images
-                with torch.no_grad():
-                    input_images = input_images.to(device)
-                    query_points = query_points.to(device)
-                    trajectories, visibilities = model.to(device).forward_once(input_images, query_points)
-                trajectories_cpu = trajectories.cpu().numpy()
-                visibilities_cpu = visibilities.cpu().numpy()
-
-                remove_point_dict_list = []
-                for frame_idx in range(trajectories_cpu.shape[1]):
-                    if frame_idx == 0:
-                        continue
-                    for point_idx, pd in enumerate(point_dict_list):
-                        new_x = trajectories_cpu[0, frame_idx, point_idx, 0]
-                        new_y = trajectories_cpu[0, frame_idx, point_idx, 1]
-                        pd['points'].append([int(round(new_x, 0)), int(round(new_y, 0))])
-                        pd['visibility'] = visibilities_cpu[0, frame_idx, point_idx]
-
-            for frame_idx in range(8):
-                if frame_idx == 0:
+                if len(image_frames_8) < 8:
                     continue
-                # draw images
-                draw_output(point_dict_list, cmap, maxdist, image_frames_8[frame_idx], image_names_8[frame_idx],
-                            point_track_video,
-                            show_point_box, point_box_h, point_track_path)
-                # clac velocity
-                clac_velocity(point_dict_list, os.path.join(point_track_path_velocity,
-                                                            image_names_8[frame_idx].split('.')[0] + '.txt'),
-                              pixel_width_a, pixel_width_w, pixel_height, frame_stride, frame_duration)
-        else:
-            if len(xy) > 0:
-                # prepare rgbs
-                input_images = torch.stack(image_frames_torch_8).unsqueeze(0)
+
+                # has 8 frame in buffer
                 # prepare query points
-                query_points = torch.stack(xy).unsqueeze(0)
-                # tracking next image
-                point_dict_list = track(model, input_images, query_points, device, point_dict_list,
-                                        segmentation_frames_8[1], y_tune, tracker_length)
-            # draw images
-            draw_output(point_dict_list, cmap, maxdist, image_frames_8[1], image_names_8[1], point_track_video,
-                        show_point_box, point_box_h, point_track_path)
+                # find moving point each grid if this grid has no point
+                new_point_list = find_new_point(seg_motion_frames_8[0], roi_list, point_dict_list, grid_factor, area_threshold)
+                # add new point into point_dict_list
+                for point in new_point_list:
+                    pid = generate_point_id(point_dict_list)
+                    point_dict = {'id': pid, 'points': [point], 'visibility': 1.0}
+                    point_dict_list.append(point_dict)
 
-            # clac velocity
-            clac_velocity(point_dict_list, os.path.join(point_track_path_velocity,
-                                                        image_names_8[1].split('.')[0] + '.txt'),
-                          pixel_width_a, pixel_width_w, pixel_height, frame_stride, frame_duration)
+                xy = []
+                for pd in point_dict_list:
+                    point = pd['points'][-1]
+                    point = torch.from_numpy(np.array(point))
+                    xy += [point]
 
-        # remove first
-        image_names_8.pop(0)
-        image_frames_8.pop(0)
-        image_frames_torch_8.pop(0)
-        segmentation_frames_8.pop(0)
-        seg_motion_frames_8.pop(0)
-    point_track_video.release()
+                if idx == 7:  # output first image
+                    draw_output(point_dict_list, cmap, maxdist, image_frames_8[0], image_names_8[0], point_track_video,
+                                show_point_box, point_box_h, point_track_path)
+                    # clac velocity
+                    clac_velocity(point_dict_list, os.path.join(point_track_path_velocity,
+                                                                image_names_8[0].split('.')[0] + '.txt'),
+                                  pixel_width_a, pixel_width_w, pixel_height, frame_stride, frame_duration)
+
+                if idx == len(file_list) - 1:  # last images
+                    if len(xy) > 0:
+                        # prepare rgbs
+                        input_images = torch.stack(image_frames_torch_8).unsqueeze(0)
+                        # prepare query points
+                        query_points = torch.stack(xy).unsqueeze(0)
+                        # tracking next 7 images
+                        with torch.no_grad():
+                            input_images = input_images.to(device)
+                            query_points = query_points.to(device)
+                            trajectories, visibilities = model.to(device).forward_once(input_images, query_points)
+                        trajectories_cpu = trajectories.cpu().numpy()
+                        visibilities_cpu = visibilities.cpu().numpy()
+
+                        remove_point_dict_list = []
+                        for frame_idx in range(trajectories_cpu.shape[1]):
+                            if frame_idx == 0:
+                                continue
+                            for point_idx, pd in enumerate(point_dict_list):
+                                new_x = trajectories_cpu[0, frame_idx, point_idx, 0]
+                                new_y = trajectories_cpu[0, frame_idx, point_idx, 1]
+                                pd['points'].append([int(round(new_x, 0)), int(round(new_y, 0))])
+                                pd['visibility'] = visibilities_cpu[0, frame_idx, point_idx]
+
+                    for frame_idx in range(8):
+                        if frame_idx == 0:
+                            continue
+                        # draw images
+                        draw_output(point_dict_list, cmap, maxdist, image_frames_8[frame_idx], image_names_8[frame_idx],
+                                    point_track_video,
+                                    show_point_box, point_box_h, point_track_path)
+                        # clac velocity
+                        clac_velocity(point_dict_list, os.path.join(point_track_path_velocity,
+                                                                    image_names_8[frame_idx].split('.')[0] + '.txt'),
+                                      pixel_width_a, pixel_width_w, pixel_height, frame_stride, frame_duration)
+                else:
+                    if len(xy) > 0:
+                        # prepare rgbs
+                        input_images = torch.stack(image_frames_torch_8).unsqueeze(0)
+                        # prepare query points
+                        query_points = torch.stack(xy).unsqueeze(0)
+                        # tracking next image
+                        point_dict_list = track(model, input_images, query_points, device, point_dict_list,
+                                                segmentation_frames_8[1], y_tune, tracker_length)
+                    # draw images
+                    draw_output(point_dict_list, cmap, maxdist, image_frames_8[1], image_names_8[1], point_track_video,
+                                show_point_box, point_box_h, point_track_path)
+
+                    # clac velocity
+                    clac_velocity(point_dict_list, os.path.join(point_track_path_velocity,
+                                                                image_names_8[1].split('.')[0] + '.txt'),
+                                  pixel_width_a, pixel_width_w, pixel_height, frame_stride, frame_duration)
+
+                # remove first
+                image_names_8.pop(0)
+                image_frames_8.pop(0)
+                image_frames_torch_8.pop(0)
+                segmentation_frames_8.pop(0)
+                seg_motion_frames_8.pop(0)
+            point_track_video.release()
 
     # ids = [1, 6, 10, 6, 3]
     # for s, v in enumerate(ids):

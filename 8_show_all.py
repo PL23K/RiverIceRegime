@@ -391,6 +391,7 @@ def plan_c():
         cv2.imshow('Display', merge_image)
         cv2.waitKey(25)
 
+
 def main():
     plan_b()
     print('end.')

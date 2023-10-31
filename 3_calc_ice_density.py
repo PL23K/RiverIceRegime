@@ -22,9 +22,9 @@ from pathlib import Path
 
 def main():
     ice_area_height_rate = 0.80  # ice_area_height / image_height
-    ice_area_bottom_width = 20.0  # 20m
-    ice_area_top_width = 50.0  # 50.0m
-    river_width = 35.0  # 35.0m
+    ice_area_bottom_width = 20.0  # 20.0m
+    ice_area_top_width = 45.5  # 45.5m
+    river_width = 150.0  # 150.0m
 
     pixel_width_a = 0.0
     pixel_width_w = 0.0
