@@ -11,18 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
 
-import torch
 import cv2
 import os
 import numpy as np
 from pathlib import Path
-from point_tracker.pips.tracker import PipsPointTracker
-import point_tracker.utils.basic
-import time
+
 from PIL import ImageFont, ImageDraw, Image
-from matplotlib import cm
+
 
 
 def ms_get_int(filename: str):
@@ -42,8 +38,8 @@ def plan_a():
     frame_stride = 1
     point_track_fully_stride = 8
 
-    stage = 3
-    video_index = 4
+    stage = 4
+    video_index = 3
     # prepare data
     image_path = f'./dataset/RiverIceFixedCamera/{stage}/{video_index}/'
     segmentation_path = f'./dataset/RiverIceFixedCameraSegmentation/{stage}/{video_index}/added_prediction'
@@ -150,8 +146,8 @@ def plan_b():
     frame_stride = 1
     point_track_fully_stride = 8
 
-    stage = 3
-    video_index = 4
+    stage = 4
+    video_index = 3
     # prepare data
     image_path = f'./dataset/RiverIceFixedCamera/{stage}/{video_index}/'
     segmentation_path = f'./dataset/RiverIceFixedCameraSegmentation/{stage}/{video_index}/added_prediction'
@@ -172,7 +168,7 @@ def plan_b():
     point_track_fully_list = os.listdir(point_track_fully_path)
     point_track_fully_list = sorted(point_track_fully_list, key=lambda item: ms_get_int_2(item))
 
-    times_font_14 = ImageFont.truetype("times.ttf", 14)
+    times_font_14 = ImageFont.truetype("times.ttf", 16)
     times_font_20 = ImageFont.truetype("times.ttf", 20)
     times_font_bd_24 = ImageFont.truetype("timesbd.ttf", 24)
 
@@ -198,7 +194,7 @@ def plan_b():
 
         merge_image = np.zeros((720, 1600, 3), dtype=np.uint8)
 
-        # 6 point track fully # draw first
+        # 6 point track fully # draw first7
         point_track_fully = cv2.imread(point_track_fully_filename)
         point_track_fully = cv2.resize(point_track_fully, (small_width + 40, small_height + 50),
                                        interpolation=cv2.INTER_LINEAR)
@@ -253,26 +249,27 @@ def plan_b():
         pil_merge_image = Image.fromarray(merge_image_rgb)
         draw_merge_image = ImageDraw.Draw(pil_merge_image)
 
-        color = (212, 212, 212)
-        draw_merge_image.text((1310, 232), '(a) input video', font=times_font_14, fill=color)
-        draw_merge_image.text((1310, 452), '(b) semantic segmentation', font=times_font_14, fill=color)
-        draw_merge_image.text((1310, 672), '(c) segmentation motion', font=times_font_14, fill=color)
-        draw_merge_image.text((1000, 672), '(d) motion revision', font=times_font_14, fill=color)
-        draw_merge_image.text((1000, 452), '(e) points selection', font=times_font_14, fill=color)
-        draw_merge_image.text((1000, 232), '(f) points tracking', font=times_font_14, fill=color)
+        color = (255, 255, 255)
+        draw_merge_image.text((1310, 230), '(a) input video', font=times_font_14, fill=color)
+        draw_merge_image.text((1310, 450), '(b) semantic segmentation', font=times_font_14, fill=color)
+        draw_merge_image.text((1310, 670), '(c) segmentation motion', font=times_font_14, fill=color)
+        draw_merge_image.text((1000, 670), '(d) motion revision', font=times_font_14, fill=color)
+        draw_merge_image.text((1000, 450), '(e) points selection', font=times_font_14, fill=color)
+        draw_merge_image.text((1000, 230), '(f) points tracking', font=times_font_14, fill=color)
+        draw_merge_image.text((10, 694), '(g) River Ice Regime Recognition: Surface Ice Concentration, Area, and Velocity', font=times_font_14, fill=color)
 
         merge_image = cv2.cvtColor(np.array(pil_merge_image), cv2.COLOR_RGB2BGR)
         cv2.imwrite(merge_filename, merge_image)
-        cv2.imshow('Display', merge_image)
-        cv2.waitKey(25)
+        # cv2.imshow('Display', merge_image)
+        # cv2.waitKey(25)
 
 
 def plan_c():
     frame_stride = 1
     point_track_fully_stride = 8
 
-    stage = 3
-    video_index = 4
+    stage = 2
+    video_index = 1
     # prepare data
     image_path = f'./dataset/RiverIceFixedCamera/{stage}/{video_index}/'
     segmentation_path = f'./dataset/RiverIceFixedCameraSegmentation/{stage}/{video_index}/added_prediction'

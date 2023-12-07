@@ -22,15 +22,23 @@ import paddle
 import paddle.io as io
 from paddle import nn
 from visualdl import LogWriter
+import paddle.nn.functional as f
+
+log_path = './runs/river_ice_experiment_rate_0.01_2000'
+
+def ms_get_int(filename: str):
+    spl = filename.split('_')
+    spl2 = spl[len(spl) - 1].split('.')
+    return int(spl2[0])
 
 class RiverIceDataset(io.Dataset):
     # data loader
     def __init__(self, mode='train'):
         super(RiverIceDataset, self).__init__()
         root_path = './dataset/'
-        train_filename = os.path.join(root_path, 'ipc_ri_ids_train.csv')
-        val_filename = os.path.join(root_path, 'ipc_ri_ids_val.csv')
-        test_filename = os.path.join(root_path, 'ipc_ri_ids_test.csv')
+        train_filename = os.path.join(root_path, 'ipc_ri_ids_train_modify_norm.csv')
+        val_filename = os.path.join(root_path, 'ipc_ri_ids_val_modify_norm.csv')
+        test_filename = os.path.join(root_path, 'ipc_ri_ids_test_modify_norm.csv')
         title = ['id', 'stage', 'video', 'sort', 'iceDensity', 'iceArea', 'motionIntensity', 'motionDensity',
                  'motionDivergence', 'maxVelocity', 'avgVelocity']
 
@@ -89,7 +97,7 @@ class RiverIceMLP(nn.Layer):
 
 
 def main():
-    logwriter = LogWriter(logdir='./runs/river_ice_experiment')
+    logwriter = LogWriter(logdir=log_path)
 
     train_dataset = RiverIceDataset(mode='train')
     val_dataset = RiverIceDataset(mode='val')
@@ -106,11 +114,32 @@ def main():
 
     fnn_model = RiverIceMLP(input_size=5, output_size=5, hidden_size=10)
 
+
+
+    # 记录训练过程中的损失函数变化情况
+    train_scores = []
+    val_scores = []
+    train_losses = []
+    val_losses = []
+    g_best_acc = 0
+    g_best_epoch = 0
+
     # 设置迭代次数
-    epochs = 1000
+    epochs = 2000
 
     # 设置优化器
-    optim = paddle.optimizer.Adam(parameters=fnn_model.parameters())
+    # learning_rate = 0.001,
+    # beta1 = 0.9,
+    # beta2 = 0.999,
+    # epsilon = 1e-8,
+    # parameters = None,
+    # weight_decay = None,
+    # grad_clip = None,
+    # lazy_mode = False,
+    # multi_precision = False,
+    # use_multi_tensor = False,
+    # name = None,
+    optim = paddle.optimizer.Adam(parameters=fnn_model.parameters(), learning_rate=0.1)
     # 设置损失函数
     loss_fn = paddle.nn.CrossEntropyLoss()
     fnn_model.train()
@@ -166,15 +195,31 @@ def main():
         avg_acc, avg_loss = np.mean(accuracies), np.mean(losses)
         print("epoch: {}, loss is: {}, acc is: {}".format(epoch + 1, avg_loss, avg_acc))
         if avg_acc > best_acc:
-            paddle.save(fnn_model.state_dict(), "./output/best.pdparams")
+            paddle.save(fnn_model.state_dict(), os.path.join(log_path, 'best.pdparams'))
             best_acc = avg_acc
+            g_best_acc = best_acc
+            g_best_epoch = epoch + 1
             print("epoch: {}, best acc".format(epoch + 1))
 
         tloss = {'train': train_avg_loss, 'val': avg_loss}
         tacc = {'train': train_avg_acc, 'val': avg_acc}
         logwriter.add_scalars(main_tag="avg_loss", tag_scalar_dict=tloss, step=epoch)
         logwriter.add_scalars(main_tag="avg_acc", tag_scalar_dict=tacc, step=epoch)
+        train_scores.append(train_avg_acc)
+        val_scores.append(avg_acc)
+        train_losses.append(train_avg_loss)
+        val_losses.append(avg_loss)
         fnn_model.train()
+    np.savetxt(os.path.join(log_path, 'train_scores.csv'), train_scores, delimiter=',',
+               fmt='%10.4f')
+    np.savetxt(os.path.join(log_path, 'val_scores.csv'), val_scores, delimiter=',',
+               fmt='%10.4f')
+    np.savetxt(os.path.join(log_path, 'train_losses.csv'), train_losses, delimiter=',',
+               fmt='%10.4f')
+    np.savetxt(os.path.join(log_path, 'val_losses.csv'), val_losses, delimiter=',',
+               fmt='%10.4f')
+    with open(os.path.join(log_path, 'best.txt'), 'w') as f:
+        f.write('{} {}'.format(g_best_epoch, g_best_acc))
     print('end.')
 
 
@@ -183,7 +228,7 @@ def evaluate():
     test_loader = paddle.io.DataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=1)
     print("length of test set: ", len(test_dataset))
 
-    model_state_dict = paddle.load("./output/best.pdparams")
+    model_state_dict = paddle.load(os.path.join(log_path, 'best.pdparams'))
     fnn_model = RiverIceMLP(input_size=5, output_size=5, hidden_size=10)
     fnn_model.set_state_dict(model_state_dict)
 
@@ -203,7 +248,93 @@ def evaluate():
     avg_acc, avg_loss = np.mean(accuracies), np.mean(losses)
     print("evaluate: loss is: {}, acc is: {}".format(avg_loss, avg_acc))
 
+    # evaluate: loss is: 0.017309415868483648, acc is: 0.9983595800524935
+
+
+def prediction():
+    # area: 4871.5786 32.1140
+    # max velocity: 8.6385 0.0000
+    # avg velocity: 3.9145 0.0000
+
+    model_state_dict = paddle.load(os.path.join(log_path, 'best.pdparams'))
+    fnn_model = RiverIceMLP(input_size=5, output_size=5, hidden_size=10)
+    fnn_model.set_state_dict(model_state_dict)
+    fnn_model.eval()
+
+    area_max = 4871.5786
+    area_min = 32.1140
+    max_velocity_max = 8.6385
+    max_velocity_min = 0.0
+    avg_velocity_max = 3.9145
+    avg_velocity_min = 0.0
+
+    ids = [1, 6, 10, 6, 3]
+    for idx_stage, idx_videos in enumerate(ids):
+        for idx_video in range(idx_videos):
+            segmentation_path = f'./dataset/RiverIceFixedCameraSegmentation/{idx_stage+1}/{idx_video+1}'
+            point_track_velocity_path = f'./dataset/RiverIceFixedCameraPointTrackVelocity/{idx_stage+1}/{idx_video+1}'
+            stage_path = Path(f'./dataset/RiverIceFixedCameraSegmentation/{idx_stage+1}/{idx_video+1}/stage')
+            stage_path.mkdir(exist_ok=True, parents=True)
+
+            file_list = os.listdir(os.path.join(segmentation_path, 'density'))
+            file_list = sorted(file_list, key=lambda item: ms_get_int(item))
+
+            for idx, frame in enumerate(file_list):
+                density_area_filename = os.path.join(segmentation_path, 'density', frame)
+                motion_intensity_filename = os.path.join(segmentation_path, 'motion_intensity', frame)
+                point_velocity_filename = os.path.join(point_track_velocity_path, frame)
+
+                stage_filename = os.path.join(stage_path, frame)
+
+
+                concentration = 0.0
+                area = 0.0
+                concentration, area = np.genfromtxt(density_area_filename, delimiter=' ', dtype=float)
+                motion_intensity = 0.0
+                motion_intensity, _, _ = np.genfromtxt(motion_intensity_filename, delimiter=' ',
+                                                                                    dtype=float)
+                motion_intensity *= 50
+                if motion_intensity > 1.0:
+                    motion_intensity = 1.0
+
+                point_dict_list = []
+                with open(point_velocity_filename, 'r') as point_velocity_file:
+                    content = point_velocity_file.read()
+                    point_dict_list = eval(content)
+
+                max_velocity = 0.0
+                avg_velocity = 0.0
+                for pd in point_dict_list:
+                    velocity = pd['velocity']
+                    max_velocity = velocity if velocity > max_velocity else max_velocity
+                    avg_velocity += velocity
+                if len(point_dict_list) > 1:
+                    avg_velocity /= len(point_dict_list)
+
+                area = (area-area_min)/(area_max-area_min)
+                max_velocity = (max_velocity-max_velocity_min)/(max_velocity_max-max_velocity_min)
+                avg_velocity = (avg_velocity-avg_velocity_min)/(avg_velocity_max-avg_velocity_min)
+
+                x_data = [concentration, area, motion_intensity, max_velocity, avg_velocity]  # 测试数据
+                y_data = [idx_stage]  # 测试数据标签
+                y_data = np.expand_dims(y_data, axis=1)
+
+                x_data = paddle.to_tensor(x_data)
+
+                predicts = fnn_model(x_data)  # 预测结果
+                predicts = f.softmax(predicts)
+                preds = paddle.argmax(predicts, axis=0, dtype='int32')
+                preds = preds.item()
+                bTrue = 0
+                if preds == idx_stage:
+                    bTrue = 1
+
+                with open(stage_filename, 'w') as file:
+                    file.write('{:d} {:d}'.format(preds, bTrue))
+                    file.close()
+
 
 if __name__ == '__main__':
     # main()
+    # prediction()
     evaluate()

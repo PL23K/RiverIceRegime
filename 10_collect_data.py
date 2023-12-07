@@ -75,7 +75,7 @@ def main():
                                                                                     delimiter=' ', dtype=float)
                 motion_intensity *= 50
                 if motion_intensity > 1.0:
-                    motion_density = 1.0
+                    motion_intensity = 1.0
                 point_dict_list = []
                 with open(velocity_filename, 'r') as point_velocity_file:
                     content = point_velocity_file.read()

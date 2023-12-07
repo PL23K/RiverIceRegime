@@ -246,8 +246,8 @@ def main():
     area_threshold = 50
     frame_stride = 1
 
-    stage = 3
-    video_index = 4
+    stage = 5
+    video_index = 2
     # prepare data
     image_path = f'./dataset/RiverIceFixedCamera/{stage}/{video_index}/'
     seg_motion_path = f'./dataset/RiverIceFixedCameraSegMotion/{stage}/{video_index}/'
