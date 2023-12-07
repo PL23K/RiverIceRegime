@@ -1,5 +1,5 @@
 # RiverIceRegime
-River Ice Regime Identification with deep learning by using Semantic Segmentation, Motion Detection, and Particle Video Tracking
+River Ice Regime Recognition with deep learning by using Semantic Segmentation, Motion Detection, and Particle Video Tracking
 
 Step by step.
 
